@@ -12,13 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use aes_ctr::Aes128Ctr;
 use aes_ctr::cipher::{
     generic_array::GenericArray,
-    stream::{
-        NewStreamCipher, SyncStreamCipher
-    }
+    stream::{NewStreamCipher, SyncStreamCipher},
 };
+use aes_ctr::Aes128Ctr;
 use blake2b_simd::blake2b;
 
 pub fn aes(password: &str, data: Vec<u8>) -> Vec<u8> {
@@ -45,7 +43,6 @@ pub fn encrypt(password: &str, data: Vec<u8>) -> Vec<u8> {
 pub fn decrypt(password: &str, data: Vec<u8>) -> Vec<u8> {
     aes(password, data)
 }
-
 
 use tiny_keccak::{Hasher, Keccak};
 
@@ -100,27 +97,23 @@ fn secp256k1_sign(privkey: &[u8], msg: &[u8]) -> [u8; SECP256K1_SIGNATURE_BYTES_
     data_arr
 }
 
-fn secp256k1_recover(signature: &[u8], message: &[u8]) -> Option<Vec<u8>> {
+fn secp256k1_recover(signature: &[u8], message: &[u8]) -> Vec<u8> {
     let context = &SECP256K1;
     let rsig = secp256k1::recovery::RecoverableSignature::from_compact(
         &signature[0..SECP256K1_SIGNATURE_BYTES_LEN - 1],
         secp256k1::recovery::RecoveryId::from_i32(i32::from(
             signature[SECP256K1_SIGNATURE_BYTES_LEN - 1],
         ))
-            .unwrap(),
+        .unwrap(),
     )
-        .unwrap();
+    .unwrap();
     let publ = context
-        .recover(
-            &secp256k1::Message::from_slice(&message[..]).unwrap(),
-            &rsig,
-        )
+        .recover(&secp256k1::Message::from_slice(message).unwrap(), &rsig)
         .unwrap();
     let serialized = publ.serialize_uncompressed();
 
-    Some(serialized[1..65].to_vec())
+    serialized[1..65].to_vec()
 }
-
 
 pub fn generate_keypair() -> (Vec<u8>, Vec<u8>) {
     let (pk, sk) = secp256k1_gen_keypair();
@@ -157,7 +150,7 @@ pub fn recover_signature(msg: Vec<u8>, signature: Vec<u8>) -> Option<Vec<u8>> {
     if signature.len() != SECP256K1_SIGNATURE_BYTES_LEN {
         None
     } else {
-        secp256k1_recover(&signature, &msg)
+        Some(secp256k1_recover(&signature, &msg))
     }
 }
 
@@ -203,9 +196,6 @@ mod tests {
 
         let (pubkey, privkey) = generate_keypair();
         let signature = sign_message(pubkey.clone(), privkey, data.to_vec()).unwrap();
-        assert_eq!(
-            recover_signature(data.to_vec(), signature),
-            Some(pubkey)
-        );
+        assert_eq!(recover_signature(data.to_vec(), signature), Some(pubkey));
     }
 }
