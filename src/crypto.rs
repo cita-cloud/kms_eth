@@ -97,22 +97,24 @@ fn secp256k1_sign(privkey: &[u8], msg: &[u8]) -> [u8; SECP256K1_SIGNATURE_BYTES_
     data_arr
 }
 
-fn secp256k1_recover(signature: &[u8], message: &[u8]) -> Vec<u8> {
+fn secp256k1_recover(signature: &[u8], message: &[u8]) -> Option<Vec<u8>> {
     let context = &SECP256K1;
-    let rsig = secp256k1::recovery::RecoverableSignature::from_compact(
-        &signature[0..SECP256K1_SIGNATURE_BYTES_LEN - 1],
-        secp256k1::recovery::RecoveryId::from_i32(i32::from(
-            signature[SECP256K1_SIGNATURE_BYTES_LEN - 1],
-        ))
-        .unwrap(),
-    )
-    .unwrap();
-    let publ = context
-        .recover(&secp256k1::Message::from_slice(message).unwrap(), &rsig)
-        .unwrap();
-    let serialized = publ.serialize_uncompressed();
-
-    serialized[1..65].to_vec()
+    if let Ok(rid) = secp256k1::recovery::RecoveryId::from_i32(i32::from(
+        signature[SECP256K1_SIGNATURE_BYTES_LEN - 1],
+    )) {
+        if let Ok(rsig) = secp256k1::recovery::RecoverableSignature::from_compact(
+            &signature[0..SECP256K1_SIGNATURE_BYTES_LEN - 1],
+            rid,
+        ) {
+            if let Ok(publ) =
+                context.recover(&secp256k1::Message::from_slice(message).unwrap(), &rsig)
+            {
+                let serialized = publ.serialize_uncompressed();
+                return Some(serialized[1..65].to_vec());
+            }
+        }
+    }
+    None
 }
 
 pub fn generate_keypair() -> (Vec<u8>, Vec<u8>) {
@@ -147,10 +149,10 @@ pub fn sign_message(_pubkey: Vec<u8>, privkey: Vec<u8>, msg: Vec<u8>) -> Option<
 }
 
 pub fn recover_signature(msg: Vec<u8>, signature: Vec<u8>) -> Option<Vec<u8>> {
-    if signature.len() != SECP256K1_SIGNATURE_BYTES_LEN {
+    if signature.len() != SECP256K1_SIGNATURE_BYTES_LEN || msg.len() != HASH_BYTES_LEN {
         None
     } else {
-        Some(secp256k1_recover(&signature, &msg))
+        secp256k1_recover(&signature, &msg)
     }
 }
 
