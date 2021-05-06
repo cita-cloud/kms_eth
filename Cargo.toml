@@ -1,6 +1,6 @@
 [package]
 name = "kms"
-version = "0.1.0"
+version = "5.0.0"
 authors = ["Rivtower Technologies <contact@rivtower.com>"]
 license = "Apache-2.0"
 edition = "2018"
@@ -24,8 +24,8 @@ tiny-keccak = { version = "*", features = ["keccak"] }
 rand = "0.6" # must be match deps of secp256k1
 secp256k1 = {version = "*", features = ["rand", "recovery"]}
 lazy_static = "*"
-aes-ctr = "*"
-blake2b_simd = "*"
+aes = "*"
+ctr = "*"
 
 [profile.release.package."*"]
 # Set the default for dependencies.

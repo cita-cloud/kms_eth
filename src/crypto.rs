@@ -12,36 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use aes_ctr::cipher::{
-    generic_array::GenericArray,
-    stream::{NewStreamCipher, SyncStreamCipher},
-};
-use aes_ctr::Aes128Ctr;
-use blake2b_simd::blake2b;
+use ctr::cipher::{generic_array::GenericArray, NewCipher, StreamCipher};
 
-pub fn aes(password: &str, data: Vec<u8>) -> Vec<u8> {
+type Aes128Ctr = ctr::Ctr128BE<aes::Aes128>;
+
+pub fn aes(password_hash: &[u8], data: Vec<u8>) -> Vec<u8> {
     let mut data = data;
 
-    let hash = blake2b(password.as_bytes());
-    let key = hash.as_bytes()[0..16].to_owned();
-    let nonce = hash.as_bytes()[16..32].to_owned();
+    let key = password_hash[0..16].to_owned();
+    let nonce = password_hash[16..32].to_owned();
 
     let key = GenericArray::from_slice(&key);
     let nonce = GenericArray::from_slice(&nonce);
 
-    let mut cipher = Aes128Ctr::new(&key, &nonce);
+    let mut cipher = Aes128Ctr::new(key, nonce);
 
     cipher.apply_keystream(&mut data);
 
     data
 }
 
-pub fn encrypt(password: &str, data: Vec<u8>) -> Vec<u8> {
-    aes(password, data)
+pub fn encrypt(password_hash: &[u8], data: Vec<u8>) -> Vec<u8> {
+    aes(password_hash, data)
 }
 
-pub fn decrypt(password: &str, data: Vec<u8>) -> Vec<u8> {
-    aes(password, data)
+pub fn decrypt(password_hash: &[u8], data: Vec<u8>) -> Vec<u8> {
+    aes(password_hash, data)
 }
 
 use tiny_keccak::{Hasher, Keccak};
