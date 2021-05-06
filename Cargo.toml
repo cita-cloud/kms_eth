@@ -8,24 +8,24 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-log = "*"
-log4rs = { version = "*", features = ["default", "gzip"] }
+log = "0.4.14"
+log4rs = { version = "1.0.0", features = ["default", "gzip"] }
 clap = "3.0.0-beta.2"
-git-version = "*"
-tonic = "*"
-prost = "*"
-tokio = { version = "*", features = ["full"] }
-cita_cloud_proto = { git = "https://github.com/cita-cloud/cita_cloud_proto" }
-r2d2 = "*"
-r2d2_sqlite = "*"
-rusqlite = "*"
-rpassword = "*"
-tiny-keccak = { version = "*", features = ["keccak"] }
+git-version = "0.3.4"
+tonic = "0.4.3"
+prost = "0.7.0"
+tokio = { version = "1.5.0", features = ["full"] }
+cita_cloud_proto = { git = "https://github.com/cita-cloud/cita_cloud_proto", branch = "v5.0.0" }
+r2d2 = "0.8.9"
+r2d2_sqlite = "0.18.0"
+rusqlite = "0.25.1"
+rpassword = "5.0.1"
+tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 rand = "0.6" # must be match deps of secp256k1
-secp256k1 = {version = "*", features = ["rand", "recovery"]}
-lazy_static = "*"
-aes = "*"
-ctr = "*"
+secp256k1 = {version = "0.20.2", features = ["rand", "recovery"]}
+lazy_static = "1.4.0"
+aes = "0.7.0"
+ctr = "0.7.0"
 
 [profile.release.package."*"]
 # Set the default for dependencies.
