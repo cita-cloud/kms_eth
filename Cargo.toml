@@ -26,3 +26,11 @@ secp256k1 = {version = "*", features = ["rand", "recovery"]}
 lazy_static = "*"
 aes-ctr = "*"
 blake2b_simd = "*"
+
+[profile.release.package."*"]
+# Set the default for dependencies.
+debug = 0
+
+[profile.release]
+# Add debug info -- line tables only
+debug = 1
