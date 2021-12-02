@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn aes_test() {
-        let password = "password";
+        let password = "password".as_bytes();
         let data = vec![1u8, 2, 3, 4, 5, 6, 7];
 
         let cipher_message = aes(password, data.clone());
