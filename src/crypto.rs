@@ -13,7 +13,11 @@
 // limitations under the License.
 
 use ctr::cipher::{generic_array::GenericArray, NewCipher, StreamCipher};
-
+use cita_cloud_proto::blockchain::raw_transaction::Tx::{NormalTx, UtxoTx};
+use cita_cloud_proto::blockchain::{RawTransaction, RawTransactions};
+use cloud_util::common::get_tx_hash;
+use prost::Message;
+use status_code::StatusCode;
 type Aes128Ctr = ctr::Ctr128BE<aes::Aes128>;
 
 pub fn aes(password_hash: &[u8], data: Vec<u8>) -> Vec<u8> {
@@ -61,24 +65,25 @@ lazy_static::lazy_static! {
     pub static ref SECP256K1: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::new();
 }
 
-fn secp256k1_gen_keypair() -> (
-    [u8; SECP256K1_PUBKEY_BYTES_LEN],
-    [u8; SECP256K1_PRIVKEY_BYTES_LEN],
-) {
+fn secp256k1_gen_keypair() -> Result<([u8; SECP256K1_PUBKEY_BYTES_LEN], [u8; SECP256K1_PRIVKEY_BYTES_LEN]), StatusCode>
+{
     let context = &SECP256K1;
-    let (seckey, pubkey) = context.generate_keypair(&mut rand::thread_rng());
+    let (sec_key, pub_key) = context.generate_keypair(&mut rand::thread_rng());
 
-    let serialized = pubkey.serialize_uncompressed();
-    let mut pubkey = [0u8; SECP256K1_PUBKEY_BYTES_LEN];
-    pubkey.copy_from_slice(&serialized[1..65]);
+    let serialized = pub_key.serialize_uncompressed();
+    let mut pub_key = [0u8; SECP256K1_PUBKEY_BYTES_LEN];
+    pub_key.copy_from_slice(&serialized[1..65]);
 
-    let mut privkey = [0u8; SECP256K1_PRIVKEY_BYTES_LEN];
-    privkey.copy_from_slice(&seckey[0..32]);
+    let mut priv_key = [0u8; SECP256K1_PRIVKEY_BYTES_LEN];
+    priv_key.copy_from_slice(&sec_key[0..32]);
 
-    (pubkey, privkey)
+    Ok((pub_key, priv_key))
 }
 
-fn secp256k1_sign(privkey: &[u8], msg: &[u8]) -> [u8; SECP256K1_SIGNATURE_BYTES_LEN] {
+fn secp256k1_sign(
+    privkey: &[u8],
+    msg: &[u8],
+) -> Result<[u8; SECP256K1_SIGNATURE_BYTES_LEN], StatusCode> {
     let context = &SECP256K1;
     // no way to create from raw byte array.
     let sec = secp256k1::SecretKey::from_slice(privkey).unwrap();
@@ -90,10 +95,10 @@ fn secp256k1_sign(privkey: &[u8], msg: &[u8]) -> [u8; SECP256K1_SIGNATURE_BYTES_
     data_arr[0..SECP256K1_SIGNATURE_BYTES_LEN - 1]
         .copy_from_slice(&data[0..SECP256K1_SIGNATURE_BYTES_LEN - 1]);
     data_arr[SECP256K1_SIGNATURE_BYTES_LEN - 1] = rec_id.to_i32() as u8;
-    data_arr
+    Ok(data_arr)
 }
 
-fn secp256k1_recover(signature: &[u8], message: &[u8]) -> Option<Vec<u8>> {
+fn secp256k1_recover(signature: &[u8], message: &[u8]) -> Result<Vec<u8>, StatusCode> {
     let context = &SECP256K1;
     if let Ok(rid) = secp256k1::recovery::RecoveryId::from_i32(i32::from(
         signature[SECP256K1_SIGNATURE_BYTES_LEN - 1],
@@ -106,27 +111,29 @@ fn secp256k1_recover(signature: &[u8], message: &[u8]) -> Option<Vec<u8>> {
                 context.recover(&secp256k1::Message::from_slice(message).unwrap(), &rsig)
             {
                 let serialized = publ.serialize_uncompressed();
-                return Some(serialized[1..65].to_vec());
+                return Ok(serialized[1..65].to_vec());
             }
         }
     }
-    None
+    Err(StatusCode::SigCheckError)
 }
 
-pub fn generate_keypair() -> (Vec<u8>, Vec<u8>) {
-    let (pk, sk) = secp256k1_gen_keypair();
-    (pk.to_vec(), sk.to_vec())
+pub fn generate_keypair() -> Result<(Vec<u8>, Vec<u8>), StatusCode> {
+    let (pk, sk) = secp256k1_gen_keypair()?;
+    Ok((pk.to_vec(), sk.to_vec()))
 }
 
 pub fn hash_data(data: &[u8]) -> Vec<u8> {
     keccak_hash(data).to_vec()
 }
 
-pub fn verify_data_hash(data: Vec<u8>, hash: Vec<u8>) -> bool {
+pub fn verify_data_hash(data: &[u8], hash: &[u8]) -> Result<(), StatusCode> {
     if hash.len() != HASH_BYTES_LEN {
-        false
+        Err(StatusCode::HashLenError)
+    } else if hash == hash_data(data) {
+        Ok(())
     } else {
-        hash == hash_data(&data)
+        Err(StatusCode::HashCheckError)
     }
 }
 
@@ -136,19 +143,110 @@ pub fn pk2address(pk: &[u8]) -> Vec<u8> {
     hash_data(pk)[HASH_BYTES_LEN - ADDR_BYTES_LEN..].to_vec()
 }
 
-pub fn sign_message(_pubkey: Vec<u8>, privkey: Vec<u8>, msg: Vec<u8>) -> Option<Vec<u8>> {
-    if msg.len() != HASH_BYTES_LEN {
-        None
+pub fn sign_message(_pubkey: &[u8], privkey: &[u8], msg: &[u8]) -> Result<Vec<u8>, StatusCode> {
+    Ok(secp256k1_sign(privkey, msg)?.to_vec())
+
+}
+
+pub fn recover_signature(msg: &[u8], signature: &[u8]) -> Result<Vec<u8>, StatusCode> {
+    if signature.len() != SECP256K1_SIGNATURE_BYTES_LEN {
+        Err(StatusCode::SigLenError)
     } else {
-        Some(secp256k1_sign(&privkey, &msg).to_vec())
+        secp256k1_recover(signature, msg)
     }
 }
 
-pub fn recover_signature(msg: Vec<u8>, signature: Vec<u8>) -> Option<Vec<u8>> {
-    if signature.len() != SECP256K1_SIGNATURE_BYTES_LEN || msg.len() != HASH_BYTES_LEN {
-        None
-    } else {
-        secp256k1_recover(&signature, &msg)
+#[allow(dead_code)]
+pub fn check_transactions(raw_txs: &RawTransactions) -> StatusCode {
+    use rayon::prelude::*;
+
+    match tokio::task::block_in_place(|| {
+        raw_txs
+            .body
+            .par_iter()
+            .map(|raw_tx| {
+                check_transaction(raw_tx).map_err(|status| {
+                    log::warn!(
+                        "check_raw_tx tx(0x{}) failed: {}",
+                        hex::encode(get_tx_hash(raw_tx).unwrap()),
+                        status
+                    );
+                    status
+                })?;
+
+                Ok(())
+            })
+            .collect::<Result<(), StatusCode>>()
+    }) {
+        Ok(()) => StatusCode::Success,
+        Err(status) => status,
+    }
+}
+
+#[allow(dead_code)]
+fn check_transaction(raw_tx: &RawTransaction) -> Result<(), StatusCode> {
+    match raw_tx.tx.as_ref() {
+        Some(NormalTx(normal_tx)) => {
+            if normal_tx.witness.is_none() {
+                return Err(StatusCode::NoneWitness);
+            }
+
+            let witness = normal_tx.witness.as_ref().unwrap();
+            let signature = &witness.signature;
+            let sender = &witness.sender;
+
+            let mut tx_bytes: Vec<u8> = Vec::new();
+            if let Some(tx) = &normal_tx.transaction {
+                tx.encode(&mut tx_bytes).map_err(|_| {
+                    log::warn!("check_raw_tx: encode transaction failed");
+                    StatusCode::EncodeError
+                })?;
+            } else {
+                return Err(StatusCode::NoneTransaction);
+            }
+
+            let tx_hash = &normal_tx.transaction_hash;
+
+            verify_data_hash(&tx_bytes, tx_hash)?;
+
+            if &pk2address(&recover_signature(tx_hash, signature)?) == sender {
+                Ok(())
+            } else {
+                Err(StatusCode::SigCheckError)
+            }
+        }
+        Some(UtxoTx(utxo_tx)) => {
+            let witnesses = &utxo_tx.witnesses;
+
+            // limit witnesses length is 1
+            if witnesses.len() != 1 {
+                return Err(StatusCode::InvalidWitness);
+            }
+
+            let mut tx_bytes: Vec<u8> = Vec::new();
+            if let Some(tx) = utxo_tx.transaction.as_ref() {
+                tx.encode(&mut tx_bytes).map_err(|_| {
+                    log::warn!("check_raw_tx: encode utxo failed");
+                    StatusCode::EncodeError
+                })?;
+            } else {
+                return Err(StatusCode::NoneUtxo);
+            }
+
+            let tx_hash = &utxo_tx.transaction_hash;
+            verify_data_hash(&tx_bytes, tx_hash)?;
+
+            for (_i, w) in witnesses.iter().enumerate() {
+                let signature = &w.signature;
+                let sender = &w.sender;
+
+                if &pk2address(&recover_signature(tx_hash, signature)?) != sender {
+                    return Err(StatusCode::SigCheckError);
+                }
+            }
+            Ok(())
+        }
+        None => Err(StatusCode::NoneRawTx),
     }
 }
 
@@ -158,11 +256,11 @@ mod tests {
 
     #[test]
     fn aes_test() {
-        let password = "password".as_bytes();
+        let password_hash= &keccak_hash("password".as_bytes());
         let data = vec![1u8, 2, 3, 4, 5, 6, 7];
 
-        let cipher_message = aes(password, data.clone());
-        let decrypted_message = aes(password, cipher_message);
+        let cipher_message = aes(password_hash, data.clone());
+        let decrypted_message = aes(password_hash, cipher_message);
         assert_eq!(data, decrypted_message);
     }
 
@@ -180,7 +278,7 @@ mod tests {
     fn test_data_hash() {
         let data = vec![1u8, 2, 3, 4, 5, 6, 7];
         let hash = hash_data(&data);
-        assert!(verify_data_hash(data.clone(), hash));
+        assert!(verify_data_hash(&data, &hash).is_ok());
     }
 
     #[test]
@@ -192,8 +290,8 @@ mod tests {
             0x5d, 0x85, 0xa4, 0x70,
         ];
 
-        let (pubkey, privkey) = generate_keypair();
-        let signature = sign_message(pubkey.clone(), privkey, data.to_vec()).unwrap();
-        assert_eq!(recover_signature(data.to_vec(), signature), Some(pubkey));
+        let (pubkey, privkey) = generate_keypair().unwrap();
+        let signature = sign_message(&pubkey, &privkey, &data).unwrap();
+        assert_eq!(recover_signature(&data, &signature), Ok(pubkey));
     }
 }
