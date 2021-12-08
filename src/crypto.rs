@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ctr::cipher::{generic_array::GenericArray, NewCipher, StreamCipher};
 use cita_cloud_proto::blockchain::raw_transaction::Tx::{NormalTx, UtxoTx};
 use cita_cloud_proto::blockchain::{RawTransaction, RawTransactions};
 use cloud_util::common::get_tx_hash;
+use ctr::cipher::{generic_array::GenericArray, NewCipher, StreamCipher};
 use prost::Message;
 use status_code::StatusCode;
 type Aes128Ctr = ctr::Ctr128BE<aes::Aes128>;
@@ -65,8 +65,13 @@ lazy_static::lazy_static! {
     pub static ref SECP256K1: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::new();
 }
 
-fn secp256k1_gen_keypair() -> Result<([u8; SECP256K1_PUBKEY_BYTES_LEN], [u8; SECP256K1_PRIVKEY_BYTES_LEN]), StatusCode>
-{
+fn secp256k1_gen_keypair() -> Result<
+    (
+        [u8; SECP256K1_PUBKEY_BYTES_LEN],
+        [u8; SECP256K1_PRIVKEY_BYTES_LEN],
+    ),
+    StatusCode,
+> {
     let context = &SECP256K1;
     let (sec_key, pub_key) = context.generate_keypair(&mut rand::thread_rng());
 
@@ -145,7 +150,6 @@ pub fn pk2address(pk: &[u8]) -> Vec<u8> {
 
 pub fn sign_message(_pubkey: &[u8], privkey: &[u8], msg: &[u8]) -> Result<Vec<u8>, StatusCode> {
     Ok(secp256k1_sign(privkey, msg)?.to_vec())
-
 }
 
 pub fn recover_signature(msg: &[u8], signature: &[u8]) -> Result<Vec<u8>, StatusCode> {
@@ -256,7 +260,7 @@ mod tests {
 
     #[test]
     fn aes_test() {
-        let password_hash= &keccak_hash("password".as_bytes());
+        let password_hash = &keccak_hash("password".as_bytes());
         let data = vec![1u8, 2, 3, 4, 5, 6, 7];
 
         let cipher_message = aes(password_hash, data.clone());
