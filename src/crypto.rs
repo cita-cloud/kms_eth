@@ -149,10 +149,7 @@ pub fn sk2pk(sk: &[u8]) -> Vec<u8> {
     let sec = secp256k1::SecretKey::from_slice(sk).unwrap();
     let pub_key = secp256k1::key::PublicKey::from_secret_key(context, &sec);
     let serialized = pub_key.serialize_uncompressed();
-    let mut pub_key = [0u8; SECP256K1_PUBKEY_BYTES_LEN];
-    pub_key.copy_from_slice(&serialized[1..65]);
-
-    pub_key.to_vec()
+    serialized[1..].to_vec()
 }
 
 #[allow(dead_code)]
