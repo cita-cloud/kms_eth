@@ -20,27 +20,29 @@ use prost::Message;
 use status_code::StatusCode;
 type Aes128Ctr = ctr::Ctr128BE<aes::Aes128>;
 
-pub fn aes(password_hash: &[u8], data: Vec<u8>) -> Vec<u8> {
-    let mut data = data;
+pub fn aes(password_hash: &[u8], data: &[u8]) -> Vec<u8> {
+    let mut data = data.to_vec();
 
-    let key = password_hash[0..16].to_owned();
-    let nonce = password_hash[16..32].to_owned();
+    let (key, nonce) = {
+        let (key, nonce) = password_hash.split_at(16);
 
-    let key = GenericArray::from_slice(&key);
-    let nonce = GenericArray::from_slice(&nonce);
+        (
+            GenericArray::from_slice(key),
+            GenericArray::from_slice(nonce),
+        )
+    };
 
     let mut cipher = Aes128Ctr::new(key, nonce);
-
     cipher.apply_keystream(&mut data);
 
     data
 }
 
-pub fn encrypt(password_hash: &[u8], data: Vec<u8>) -> Vec<u8> {
+pub fn encrypt(password_hash: &[u8], data: &[u8]) -> Vec<u8> {
     aes(password_hash, data)
 }
 
-pub fn decrypt(password_hash: &[u8], data: Vec<u8>) -> Vec<u8> {
+pub fn decrypt(password_hash: &[u8], data: &[u8]) -> Vec<u8> {
     aes(password_hash, data)
 }
 
@@ -277,8 +279,8 @@ mod tests {
         let password_hash = &keccak_hash("password".as_bytes());
         let data = vec![1u8, 2, 3, 4, 5, 6, 7];
 
-        let cipher_message = aes(password_hash, data.clone());
-        let decrypted_message = aes(password_hash, cipher_message);
+        let cipher_message = aes(password_hash, &data);
+        let decrypted_message = aes(password_hash, &cipher_message);
         assert_eq!(data, decrypted_message);
     }
 
