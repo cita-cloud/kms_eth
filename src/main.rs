@@ -29,7 +29,7 @@ const GIT_HOMEPAGE: &str = "https://github.com/cita-cloud/kms_eth";
 /// This doc string acts as a help message when the user runs '--help'
 /// as do all doc strings on fields
 #[derive(Parser)]
-#[clap(version = "6.3.3", author = "Rivtower Technologies.")]
+#[clap(version, author)]
 struct Opts {
     #[clap(subcommand)]
     subcmd: SubCommand,
