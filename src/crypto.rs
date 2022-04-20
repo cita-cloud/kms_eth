@@ -15,7 +15,7 @@
 use cita_cloud_proto::blockchain::raw_transaction::Tx::{NormalTx, UtxoTx};
 use cita_cloud_proto::blockchain::{RawTransaction, RawTransactions};
 use cloud_util::common::get_tx_hash;
-use ctr::cipher::{generic_array::GenericArray, NewCipher, StreamCipher};
+use ctr::cipher::{generic_array::GenericArray, KeyIvInit, StreamCipher};
 use prost::Message;
 use status_code::StatusCode;
 type Aes128Ctr = ctr::Ctr128BE<aes::Aes128>;
@@ -95,7 +95,7 @@ fn secp256k1_sign(
     // no way to create from raw byte array.
     let sec = secp256k1::SecretKey::from_slice(privkey).unwrap();
     if let Ok(message) = secp256k1::Message::from_slice(msg) {
-        let s = context.sign_recoverable(&message, &sec);
+        let s = context.sign_ecdsa_recoverable(&message, &sec);
         let (rec_id, data) = s.serialize_compact();
         let mut data_arr = [0; SECP256K1_SIGNATURE_BYTES_LEN];
 
@@ -111,15 +111,15 @@ fn secp256k1_sign(
 
 fn secp256k1_recover(signature: &[u8], message: &[u8]) -> Result<Vec<u8>, StatusCode> {
     let context = &SECP256K1;
-    if let Ok(rid) = secp256k1::recovery::RecoveryId::from_i32(i32::from(
+    if let Ok(rid) = secp256k1::ecdsa::RecoveryId::from_i32(i32::from(
         signature[SECP256K1_SIGNATURE_BYTES_LEN - 1],
     )) {
-        if let Ok(rsig) = secp256k1::recovery::RecoverableSignature::from_compact(
+        if let Ok(rsig) = secp256k1::ecdsa::RecoverableSignature::from_compact(
             &signature[0..SECP256K1_SIGNATURE_BYTES_LEN - 1],
             rid,
         ) {
             if let Ok(msg) = secp256k1::Message::from_slice(message) {
-                if let Ok(publ) = context.recover(&msg, &rsig) {
+                if let Ok(publ) = context.recover_ecdsa(&msg, &rsig) {
                     let serialized = publ.serialize_uncompressed();
                     return Ok(serialized[1..65].to_vec());
                 }
@@ -153,7 +153,7 @@ pub const ADDR_BYTES_LEN: usize = 20;
 pub fn sk2pk(sk: &[u8]) -> Vec<u8> {
     let context = &SECP256K1;
     let sec = secp256k1::SecretKey::from_slice(sk).unwrap();
-    let pub_key = secp256k1::key::PublicKey::from_secret_key(context, &sec);
+    let pub_key = secp256k1::PublicKey::from_secret_key(context, &sec);
     let serialized = pub_key.serialize_uncompressed();
     serialized[1..].to_vec()
 }
