@@ -8,7 +8,8 @@ docker build -t citacloud/kms_eth .
 
 ```
 $ kms -h       
-Rivtower Technologies.
+kms 6.4.0
+Rivtower Technologies <contact@rivtower.com>
 This doc string acts as a help message when the user runs '--help' as do all doc strings on fields
 
 USAGE:
@@ -19,19 +20,8 @@ OPTIONS:
     -V, --version    Print version information
 
 SUBCOMMANDS:
-    git     print information from git
     help    Print this message or the help of the given subcommand(s)
     run     run this service
-```
-
-### kms-git
-
-打印`git`相关的信息。
-
-```
-$ kms git   
-git version: 8d5961f-modified
-homepage: https://github.com/cita-cloud/kms_eth
 ```
 
 ### kms-run
